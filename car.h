@@ -4,8 +4,11 @@
 typedef struct Car
 {
     //TODO:  Add information to store about cars
-    int destination;
-    int totalTimeSteps;
+    int starting;
+    int ending;
+    int destinationVertex;
+    int cycleCarJoined;
+    bool hasMoved;
     
 }  Car;
 

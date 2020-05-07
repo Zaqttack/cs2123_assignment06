@@ -1,6 +1,5 @@
 #include "trafficSimulator.h"
 
-
 /* trafficSimulator
  * input: char* name of file to read
  * output: N/A
@@ -11,7 +10,11 @@ void trafficSimulator( char * filename )
 {
     /* Read in the traffic data.  You may want to create a separate function to do this. */
     TrafficSimData *simulationData = readTrafficData(filename);
+    simulationData->maxStepsToDest = 0;
 
+    int * commandStepTracker = simulationData->printCommandSteps;
+    double averageTracker = 0.0;
+    int i;
     /* Loop until all events processed and either all cars reached destination or gridlock has occurred */
     for(int cycle = 0; ; cycle++) {
         //pop out of PQ and place in queue of cars to be added to road
@@ -22,68 +25,79 @@ void trafficSimulator( char * filename )
             Event * event = dequeuePQ(simulationData->events);
             RoadData * roadData = getEdgeData(simulationData->trafficGraph, event->starting, event->ending);
             Car * car = malloc(sizeof(Car));
-            car->destination = event->destinationVertex;
-            car->totalTimeSteps = 0;
+            car->starting = event->starting;
+            car->ending = event->ending;
+            car->destinationVertex = event->destinationVertex;
+            car->cycleCarJoined = cycle;
             enqueue(roadData->waitingToEnter, car);
             
             /* have we already enqueued a car this cycle */
-            // if(roadData->lastTimeCarsEnqueued != cycle) {
-            //     printf("CYCLE %d - ADD_CAR_EVENT - Cars enqueued on road from %d to %d\n", cycle, roadData->from, roadData->to);
-            //     roadData->lastTimeCarsEnqueued = cycle;
-            // }
+            if(roadData->lastTimeCarsEnqueued != cycle) {
+                printf("CYCLE %d - ADD_CAR_EVENT - Cars enqueued on road from %d to %d\n", cycle, roadData->from, roadData->to);
+                roadData->lastTimeCarsEnqueued = cycle;
+            }
         }
 
+        int j;
+
         /* print road events */
-        printf("CYCLE %d - PRINT_ROADS_EVENT - Current contents of the roads:\n", cycle); 
-        int i, j;
-        for(i = 0; i < simulationData->numRoads; i++) {
-            RoadData * currentRoad = simulationData->roads[i];
-            printf("Cars on the road from %d to %d:\n", currentRoad->from, currentRoad->to);
-            for(j = 0; j < currentRoad->lengthOfRoad; j++) {
-                if(currentRoad->carsOnRoad[j] == -999) {
-                    printf("- ");
+        if(cycle == *commandStepTracker) {
+            commandStepTracker++;
+            printf("\nCYCLE %d - PRINT_ROADS_EVENT - Current contents of the roads:\n", cycle); 
+            for(i = 0; i < simulationData->numRoads; i++) {
+                RoadData * currentRoad = simulationData->roads[i];
+                printf("Cars on the road from %d to %d:\n", currentRoad->from, currentRoad->to);
+                for(j = 0; j < currentRoad->lengthOfRoad; j++) {
+                    if(currentRoad->carsOnRoad[j] == NULL) {
+                        printf("- ");
+                    }
+                    else {
+                        printf("%d ", currentRoad->carsOnRoad[j]->destinationVertex);
+                    }
                 }
-                else {
-                    printf("%d ", currentRoad->carsOnRoad[j]);
-                }
+                printf("\n");
             }
             printf("\n");
         }
-        printf("\n\n");
-
 
         /* First try to move through the intersection */
+        bool carReachedDest = false;
         for(i = 0; i < simulationData->numRoads; i++) {
             RoadData * currentRoad = simulationData->roads[i];
-            int carToMove = currentRoad->carsOnRoad[0];
+            Car * carToMove = currentRoad->carsOnRoad[0];
 
-            if(carToMove == -999)
+            if(carToMove == NULL)
                 continue;
 
             //if the light is greeen
             if(currentRoad->currentCycle >= currentRoad->greenOn && currentRoad->currentCycle < currentRoad->greenOff) {
                 // check cars destination && check shortest route
-                if(currentRoad->to == carToMove) {
-                    currentRoad->carsOnRoad[0] = -999;
+                if(currentRoad->to == carToMove->destinationVertex) {
+                    currentRoad->carsOnRoad[0] = NULL;
+                    int moved = cycle - carToMove->cycleCarJoined;
                     // car reached destination
-                    printf("CYCLE %d - Car successfully traveled from N/A to N/A in N/A time steps.\n", cycle);
+                    printf("CYCLE %d - Car successfully traveled from %d to %d in %d time steps.\n", cycle, carToMove->starting, carToMove->destinationVertex, moved);
 
+                    simulationData->averageCounter += (double)moved;
+                    averageTracker++;
+                    if(moved > simulationData->maxStepsToDest)
+                        simulationData->maxStepsToDest = moved;
                     simulationData->currentCarsActive--;
+                    carReachedDest = true;
                 }
                 else {
-                    currentRoad->carsOnRoad[0] = -999;
-
-                    int * pNext = NULL;
-                    if(!getNextOnShortestPath(simulationData->trafficGraph, currentRoad->to, carToMove, pNext)) {
+                    int * pNext = malloc(sizeof(int));
+                    if(!getNextOnShortestPath(simulationData->trafficGraph, currentRoad->to, carToMove->destinationVertex, pNext)) {
                         break;
                     }
 
-                    RoadData * nextRoad = getEdgeData(simulationData->trafficGraph, currentRoad->to, pNext);
+                    RoadData * nextRoad = getEdgeData(simulationData->trafficGraph, currentRoad->to, *pNext);
 
-                    Car * car = malloc(sizeof(Car));
-                    car->destination = carToMove;
-                    // car->totalTimeSteps++;
-                    enqueue(nextRoad->waitingToEnter, car);
+                    if(nextRoad->carsOnRoad[nextRoad->lengthOfRoad - 1] == NULL) {
+                        carToMove->hasMoved = true;
+                        nextRoad->carsOnRoad[nextRoad->lengthOfRoad - 1] = carToMove;
+                        currentRoad->carsOnRoad[0] = NULL;
+                    }
                 }
             }
         }
@@ -91,12 +105,13 @@ void trafficSimulator( char * filename )
         /* Second move cars forward on every road */
         for(i = 0; i < simulationData->numRoads; i++) {
             RoadData * currentRoad = simulationData->roads[i];
-            int * carsOnRoad = currentRoad->carsOnRoad;
+            Car ** carsOnRoad = currentRoad->carsOnRoad;
 
             for(j = currentRoad->lengthOfRoad - 1; j > 0; j--) {
-                if(carsOnRoad[j] != -999 && carsOnRoad[j - 1] == -999) {
+                if(carsOnRoad[j] != NULL && carsOnRoad[j - 1] == NULL) {
                     carsOnRoad[j - 1] = carsOnRoad[j];
-                    carsOnRoad[j] = -999;
+                    carsOnRoad[j] = NULL;
+                    carsOnRoad[j - 1]->hasMoved = true;
                     j--;
                 }
             }
@@ -105,13 +120,14 @@ void trafficSimulator( char * filename )
         /* Third move cars onto road if possible */
         for(i = 0; i < simulationData->numRoads; i++) {
             RoadData * currentRoad = simulationData->roads[i];
-            int * cars = currentRoad->carsOnRoad;
+            Car ** cars = currentRoad->carsOnRoad;
             int lengthOfRoad = currentRoad->lengthOfRoad;
 
-            if(cars[lengthOfRoad - 1] == -999 && !isEmpty(currentRoad->waitingToEnter)) {
+            if(cars[lengthOfRoad - 1] == NULL && !isEmpty(currentRoad->waitingToEnter)) {
                 // move waiting car onto road
                 Car * car = dequeue(currentRoad->waitingToEnter);
-                currentRoad->carsOnRoad[lengthOfRoad - 1] = car->destination;
+                currentRoad->carsOnRoad[lengthOfRoad - 1] = car;
+                car->hasMoved = true;
             }
         }
 
@@ -126,17 +142,45 @@ void trafficSimulator( char * filename )
         }
 
         /* check if current moving cars are zero */
-        if(simulationData->currentCarsActive <= 0)
+        if(simulationData->currentCarsActive <= 0) {
+            printf("\nAverage number of time steps to the reach their destination is %.2lf.\n", simulationData->averageCounter /= averageTracker);
+            printf("Maximum number of time steps to the reach their destination is %d.\n", simulationData->maxStepsToDest);
+            printf("\n");
+
             break;
+        }
+
+        /* check for grid lock */
+        int cycledDetectedOn;
+        if(cycle % simulationData->longestLightCycle == 0) {
+            bool haveAnyCarsMoved = carReachedDest;
+
+            for(i = 0; i < simulationData->numRoads; i++) {
+                RoadData * currentRoad = simulationData->roads[i];
+                Car ** car = currentRoad->carsOnRoad;
+
+                for(j = 0; j < currentRoad->lengthOfRoad; j++) {
+                    if(car[j] == NULL)
+                        continue;
+                    haveAnyCarsMoved = haveAnyCarsMoved || car[j]->hasMoved;
+                    // int first time gird was detected
+                    if(haveAnyCarsMoved == true)
+                        cycledDetectedOn = cycle;
+                    car[j]->hasMoved = false;
+                }
+            }
+            if(haveAnyCarsMoved == false) {
+                printf("CYCLE %d - Gridlock detected.\n", cycledDetectedOn + 1);
+                break;
+            }
+        }
     }
 
     /* final print statements */
-    // Average number of time steps to the reach their destination is 4.00.
-    // Maximum number of time steps to the reach their destination is 4.
 }
 
-TrafficSimData *readTrafficData(char* filename) {
-    TrafficSimData *simulationData = malloc(sizeof(TrafficSimData));
+TrafficSimData * readTrafficData(char * filename) {
+    TrafficSimData * simulationData = malloc(sizeof(TrafficSimData));
 
     FILE * fp;
     fp = fopen(filename, "r");
@@ -182,19 +226,20 @@ TrafficSimData *readTrafficData(char* filename) {
             roadDataStruct->greenOff = greenOff;
             roadDataStruct->resetCycle = resetCycle;
             roadDataStruct->lastTimeCarsEnqueued = -1;
-            roadDataStruct->carsOnRoad = malloc(sizeof(int) * lengthOfRoad);
+            roadDataStruct->carsOnRoad = malloc(sizeof(Car) * lengthOfRoad);
             for(k = 0; k < lengthOfRoad; ++k)
-                roadDataStruct->carsOnRoad[k] = -999;
+                roadDataStruct->carsOnRoad[k] = NULL;
 
             roadDataStruct->waitingToEnter = createQueue();
-            
+
             setEdge(simulationData->trafficGraph, fromVertex, toVertex, lengthOfRoad);
             setEdgeData(simulationData->trafficGraph, fromVertex, toVertex, roadDataStruct);
+
             simulationData->roads[roadCounter++] = roadDataStruct;
+            if(simulationData->longestLightCycle < resetCycle)
+                simulationData->longestLightCycle = resetCycle;
         }
     }
-
-
 
     int addCarCommands;
     fscanf(fp, "%d", &addCarCommands);
@@ -206,18 +251,18 @@ TrafficSimData *readTrafficData(char* filename) {
         fscanf(fp, "%d", &whenToAddCar);
         fscanf(fp, "%d", &howManyToAdd);
 
-        for(j = 0; i < howManyToAdd; i++) {
+        for(j = 0; j < howManyToAdd; j++) {
             // adding into an array?
             int destinationVertex;
             fscanf(fp, "%d", &destinationVertex);
 
-            Event *eventData = malloc(sizeof(Event));
-            eventData->starting = starting;
-            eventData->ending = ending;
-            eventData->whenToAddCar = whenToAddCar;
-            eventData->destinationVertex = destinationVertex;
+            Event * event = malloc(sizeof(Event));
+            event->starting = starting;
+            event->ending = ending;
+            event->whenToAddCar = whenToAddCar;
+            event->destinationVertex = destinationVertex;
 
-            enqueueByPriority(simulationData->events, eventData, whenToAddCar);
+            enqueueByPriority(simulationData->events, event, whenToAddCar);
             simulationData->currentCarsActive++;
         }
     }
@@ -225,7 +270,7 @@ TrafficSimData *readTrafficData(char* filename) {
     int printRoadCommands;
     fscanf(fp, "%d", &printRoadCommands);
     simulationData->printCommandSteps = malloc(sizeof(int) * printRoadCommands);
-    for(i = 0; i < printRoadCommands - 1; i++) {
+    for(i = 0; i < printRoadCommands; i++) {
         int cycleToPrintRoads;
         fscanf(fp, "%d", &cycleToPrintRoads);
         simulationData->printCommandSteps[i] = cycleToPrintRoads;

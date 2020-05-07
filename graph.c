@@ -390,7 +390,7 @@ edgeType getEdgeData( Graph* g, graphType from, graphType to )
     int j = getIndex( g, to );
 
     if( i==-1 || j==-1){
-        printf("ERROR - Attempt to set invalid edge\n");
+        printf("ERROR - Attempt to get invalid edge\n");
         exit(-1);
     }
 

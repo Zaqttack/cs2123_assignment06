@@ -23,7 +23,7 @@ typedef struct RoadData
     int from, to;
 
     /* array of cars associated with this road */
-    int *carsOnRoad;
+    Car ** carsOnRoad;
 
     /* queue of cars waiting to enter this road */
     Queue *waitingToEnter;

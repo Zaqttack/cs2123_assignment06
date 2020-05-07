@@ -10,7 +10,6 @@ typedef enum eventType{ ADD_CAR_EVENT, PRINT_ROADS_EVENT } eventType;
 typedef struct Event
 {
     //TODO:  Add information associated with the different events of your simulation.
-
     // adding cars to road
     // from vertex
     int starting;
@@ -23,6 +22,8 @@ typedef struct Event
 
     // time step to add event
     int whenToAddCar;
+
+    // int cycleCarJoined;
 
 }  Event;
 

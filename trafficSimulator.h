@@ -17,7 +17,7 @@ typedef struct TrafficSimData
 {
     //Optional TODO - Fill this struct in with the data needed to simulate traffic.  Suggested data:
     /* graph representing the road network */
-    Graph *trafficGraph;
+    Graph * trafficGraph;
 
     /* array of the roads of the graph in the sequence they were added to the graph */
     RoadData ** roads;
@@ -30,9 +30,11 @@ typedef struct TrafficSimData
     int currentCarsActive;
 
     /* track the longest number of time steps that any light takes to cycle around */
-    int longestTimeStep;
+    int longestLightCycle;
 
     int *printCommandSteps;
+    double averageCounter;
+    int maxStepsToDest;
 
 }  TrafficSimData;
 

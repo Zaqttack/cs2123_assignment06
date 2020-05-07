@@ -7,8 +7,7 @@ int main( int argc, char *argv[] )
 {
     int i;
     int numFiles = 5;
-    // char *defaultFilenames[] = {"data-Trivial.txt", "data-Simple.txt", "data-Gridlock.txt", "data-NearGridlock.txt", "data.txt"};
-    char *defaultFilenames[] = {"data-Simple.txt"};
+    char *defaultFilenames[] = {"data-Trivial.txt", "data-Simple.txt", "data-Gridlock.txt", "data-NearGridlock.txt", "data.txt"};
 
     if( argc==2 ) /* Usage: ./driver <filename> */
         trafficSimulator( argv[1] );
@@ -19,7 +18,7 @@ int main( int argc, char *argv[] )
             printf("\n--------------- START OF OUTPUT FOR %s -----------------\n\n", defaultFilenames[i]);
             trafficSimulator( defaultFilenames[i] );
             printf("\n--------------- END OF OUTPUT FOR %s -----------------\n\n", defaultFilenames[i]);
-        };
+        }
     }
 
     return 0;
